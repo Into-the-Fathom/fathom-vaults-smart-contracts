@@ -12,18 +12,12 @@ import "./interfaces/liquidationStrategy/IVaultLendingCallee.sol";
 import "./interfaces/liquidationStrategy/IERC165.sol";
 import "./interfaces/liquidationStrategy/IGenericTokenAdapter.sol";
 import "./interfaces/liquidationStrategy/IUniswapV2Router02.sol";
-import { IBookKeeper } from"./interfaces/liquidationStrategy/IBookKeeper.sol";
+import "./interfaces/liquidationStrategy/IStablecoinAdapter.sol";
+import { IBookKeeper } from "./interfaces/liquidationStrategy/IBookKeeper.sol";
 import "./libraries/BytesHelper.sol";
 
 // solhint-disable
-contract LiquidationStrategy is 
-    BaseStrategy, 
-    Pausable, 
-    ReentrancyGuard, 
-    IVaultLendingCallee, 
-    IERC165
-{
-
+contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultLendingCallee, IERC165 {
     struct LocalVars {
         address liquidatorAddress;
         IGenericTokenAdapter tokenAdapter;
@@ -41,10 +35,10 @@ contract LiquidationStrategy is
     using BytesHelper for *;
     address public strategyManager;
     address public fixedSpreadLiquidationStrategy;
-    address public stablecoinAdapter;
     ERC20 public WXDC;
     ERC20 public fathomStablecoin;
     ERC20 public usdToken;
+    IStablecoinAdapter public stablecoinAdapter;
     IBookKeeper public bookKeeper;
     bool public allowLoss;
     WXDCInfo public idleWXDC;
@@ -52,8 +46,6 @@ contract LiquidationStrategy is
     // --- Math ---
     uint256 constant WAD = 10 ** 18;
     uint256 constant RAY = 10 ** 27;
-
-
 
     event LogSetStrategyManager(address indexed _strategyManager);
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
@@ -80,11 +72,11 @@ contract LiquidationStrategy is
     }
 
     constructor(
-        address _asset, 
-        string memory _name, 
-        address _strategyManager, 
-        address _fixedSpreadLiquidationStrategy, 
-        address _wrappedXDC, 
+        address _asset,
+        string memory _name,
+        address _strategyManager,
+        address _fixedSpreadLiquidationStrategy,
+        address _wrappedXDC,
         address _bookKeeper,
         address _fathomStablecoin,
         address _usdToken,
@@ -95,9 +87,9 @@ contract LiquidationStrategy is
         require(_wrappedXDC != address(0), "LiquidationStrategy: zero address");
         strategyManager = _strategyManager;
         fixedSpreadLiquidationStrategy = _fixedSpreadLiquidationStrategy;
-        stablecoinAdapter = _stablecoinAdapter;
         WXDC = ERC20(_wrappedXDC);
         bookKeeper = IBookKeeper(_bookKeeper);
+        stablecoinAdapter = IStablecoinAdapter(_stablecoinAdapter);
         fathomStablecoin = ERC20(_fathomStablecoin);
         usdToken = ERC20(_usdToken);
     }
@@ -118,11 +110,13 @@ contract LiquidationStrategy is
     function shutdownWithdraw(uint256 _amount) external override onlyStrategyManager {
         _emergencyWithdraw(_amount);
     }
+
     function setStrategyManager(address _strategyManager) external onlyStrategyManager {
         require(_strategyManager != address(0), "LiquidationStrategy: zero address");
         strategyManager = _strategyManager;
         emit LogSetStrategyManager(_strategyManager);
     }
+
     function setFixedSpreadLiquidationStrategy(address _fixedSpreadLiquidationStrategy) external onlyStrategyManager {
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
         fixedSpreadLiquidationStrategy = _fixedSpreadLiquidationStrategy;
@@ -135,11 +129,11 @@ contract LiquidationStrategy is
         emit LogAllowLoss(_allowLoss);
     }
 
-    function shutdownWithdrawWXDC(uint256 _amount) external onlyStrategyManager { 
+    function shutdownWithdrawWXDC(uint256 _amount) external onlyStrategyManager {
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
         idleWXDC.WXDCAmount = idleWXDC.WXDCAmount - _amount;
-        if(idleWXDC.WXDCAmount == 0) {
+        if (idleWXDC.WXDCAmount == 0) {
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
@@ -161,17 +155,11 @@ contract LiquidationStrategy is
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
 
         idleWXDC.WXDCAmount -= _amount;
-        if ( idleWXDC.WXDCAmount == 0 ) {
+        if (idleWXDC.WXDCAmount == 0) {
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
-        uint256 receivedAmount = _sellCollateral(
-            _token,
-            _path,
-            _router,
-            _amount,
-            _minAmountOut
-        );
+        uint256 receivedAmount = _sellCollateral(_token, _path, _router, _amount, _minAmountOut);
         emit LogSellWXDC(_token, _path, _router, _amount, _minAmountOut, receivedAmount);
     }
 
@@ -182,10 +170,7 @@ contract LiquidationStrategy is
         bytes calldata data
     ) external onlyFixedSpreadLiquidationStrategy whenNotPaused nonReentrant {
         LocalVars memory _vars;
-        (_vars.liquidatorAddress, _vars.tokenAdapter, _vars.router) = abi.decode(
-            data,
-            (address, IGenericTokenAdapter, IUniswapV2Router02)
-        );
+        (_vars.liquidatorAddress, _vars.tokenAdapter, _vars.router) = abi.decode(data, (address, IGenericTokenAdapter, IUniswapV2Router02));
 
         // Retrieve collateral token
         uint256 retrievedCollateralAmount = _retrieveCollateral(_vars.tokenAdapter, _collateralAmountToLiquidate);
@@ -202,27 +187,26 @@ contract LiquidationStrategy is
         // in this case, the difference will be paid by the LiquidatorStrategy
 
         /*
-        * LiquidationStrategy's condition quadrant as of 16th Jan 2024
-        * 
-        * +------------------+--------------------------------------+--------------------------------------+
-        * |                  | Sell WXDC to DEX                     | Not Sell WXDC to DEX                 |
-        * +------------------+--------------------------------------+--------------------------------------+
-        * | Allow Loss       | Sell WXDC and cover the loss         | X                                    |
-        * |                  | with FXD reserve in                  |                                      |
-        * |                  | LiquidationStrategy                  |                                      |
-        * +------------------+--------------------------------------+--------------------------------------+
-        * | Not Allow Loss   | Sell only if condition that          | Keep WXDC to LiquidationStrategy     |
-        * |                  | dexAmountOut > amountNeededToPayDebt | and deposit from LiquidationStrategy |
-        * |                  | and deposit FXD from WXDCSwap        |                                      |
-        * +------------------+--------------------------------------+--------------------------------------+
-        */
-
+         * LiquidationStrategy's condition quadrant as of 16th Jan 2024
+         *
+         * +------------------+--------------------------------------+--------------------------------------+
+         * |                  | Sell WXDC to DEX                     | Not Sell WXDC to DEX                 |
+         * +------------------+--------------------------------------+--------------------------------------+
+         * | Allow Loss       | Sell WXDC and cover the loss         | X                                    |
+         * |                  | with FXD reserve in                  |                                      |
+         * |                  | LiquidationStrategy                  |                                      |
+         * +------------------+--------------------------------------+--------------------------------------+
+         * | Not Allow Loss   | Sell only if condition that          | Keep WXDC to LiquidationStrategy     |
+         * |                  | dexAmountOut > amountNeededToPayDebt | and deposit from LiquidationStrategy |
+         * |                  | and deposit FXD from WXDCSwap        |                                      |
+         * +------------------+--------------------------------------+--------------------------------------+
+         */
 
         if (allowLoss == false) {
-            // Condition #1 if there is no loss, sell on DEX 
-            if ( dexAmountOut >= amountNeededToPayDebt ) {
+            // Condition #1 if there is no loss, sell on DEX
+            if (dexAmountOut >= amountNeededToPayDebt) {
                 // @sangjun I think the below code can be refactored with the else if condition when allowLoss is true
-                    uint256 fathomStablecoinReceived = _sellCollateral(
+                uint256 fathomStablecoinReceived = _sellCollateral(
                     _vars.tokenAdapter.collateralToken(),
                     path,
                     _vars.router,
@@ -230,10 +214,7 @@ contract LiquidationStrategy is
                     dexAmountOut
                 );
                 if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                    require(
-                        fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
-                        "vaultLendingCall: not enough to repay debt"
-                    );
+                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
                 }
                 emit LogVaultLiquidationSuccess(
                     _vars.liquidatorAddress,
@@ -244,11 +225,8 @@ contract LiquidationStrategy is
                     path
                 );
             } else {
-                // Condition #2 if there is loss, don't sell on DEX 
-                require(
-                    fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
-                    "vaultLendingCall: not enough to repay debt"
-                );
+                // Condition #2 if there is loss, don't sell on DEX
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
                 _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
                 idleWXDC.WXDCAmount += retrievedCollateralAmount;
                 idleWXDC.amountNeededToPayDebt += amountNeededToPayDebt;
@@ -278,10 +256,7 @@ contract LiquidationStrategy is
             // and the liquidator will try to pay the difference with its own funds.
             // uint256 fundsUsedFromLiquidator;
             if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                require(
-                    fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
-                    "vaultLendingCall: not enough to repay debt"
-                );
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
             }
             // Deposit Fathom Stablecoin for liquidatorAddress
             _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
@@ -296,14 +271,13 @@ contract LiquidationStrategy is
         }
     }
 
-
-//0)make a WXDCInfo struct - done
-// it should have WXDC amount, and the amountNeededToPayDebt as the price of WXDC, last will be the average price of WXDC idle in this contract.
-//1)make a struct variable called IdleWXDC - done
-//2)make a fn that can sell WXDC to DEXes. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0. It is upto strategyManager to decide
-//if selling WXDC at some point is profitable or not - done
-// I guess I can let the StrategyManager call which DEX it wants to sell WXDC by passing the DEX or Router address as an argument. - done
-//3)emergency withdraw of WXDC should then adjust the idle WXDC amount - done
+    //0)make a WXDCInfo struct - done
+    // it should have WXDC amount, and the amountNeededToPayDebt as the price of WXDC, last will be the average price of WXDC idle in this contract.
+    //1)make a struct variable called IdleWXDC - done
+    //2)make a fn that can sell WXDC to DEXes. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0. It is upto strategyManager to decide
+    //if selling WXDC at some point is profitable or not - done
+    // I guess I can let the StrategyManager call which DEX it wants to sell WXDC by passing the DEX or Router address as an argument. - done
+    //3)emergency withdraw of WXDC should then adjust the idle WXDC amount - done
 
     //I need to make a fn that can sell WXDC to DEXes when it is profitable, but how to know if it is profitable? Need to have some kind of records that can track the
     //Price of WXDC when the WXDC is withdrawn. how? should I just keep track of the _debtValueToRepay along with the WXDc amount?
@@ -313,7 +287,6 @@ contract LiquidationStrategy is
     //I need to make fn for the strategy manager to be able to withdraw WXDC in emergency - done
     //I need to fn to change FSLS address - done
     // I need a fn to change strategy manager address - done
-
 
     function _emergencyWithdraw(uint256 _amount) internal override {
         require(_amount > 0, "LiquidationStrategy: zero amount");
@@ -325,17 +298,13 @@ contract LiquidationStrategy is
         return type(IVaultLendingCallee).interfaceId == _interfaceId;
     }
 
-
-    function _depositStablecoin(
-        uint256 _amount,
-        address _liquidatorAddress
-    ) internal {
+    function _depositStablecoin(uint256 _amount, address _liquidatorAddress) internal {
         fathomStablecoin.safeApprove(address(stablecoinAdapter), type(uint).max);
         stablecoinAdapter.deposit(_liquidatorAddress, _amount, abi.encode(0));
         fathomStablecoin.safeApprove(address(stablecoinAdapter), 0);
     }
 
-    function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal returns (uint256){
+    function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal returns (uint256) {
         bookKeeper.whitelist(address(_tokenAdapter));
         uint256 balanceBefore = WXDC.balanceOf(address(this));
         _tokenAdapter.withdraw(address(this), _amount, abi.encode(address(this)));
@@ -343,9 +312,8 @@ contract LiquidationStrategy is
         return balanceAfter.sub(balanceBefore);
     }
 
-
     // _computeMostProfitablePath should be upgraded/updated once curvePool launches and DEX pool of USDT/FXD will be drained.
-    // an alternative solution can be to involve xSwap, but needs more research. 
+    // an alternative solution can be to involve xSwap, but needs more research.
     // above problem is not the problem for the current implementation(as of 16th of Jan) but possible future issue.
     function _computeMostProfitablePath(
         IUniswapV2Router02 _router,
@@ -365,7 +333,7 @@ contract LiquidationStrategy is
         path2[2] = address(fathomStablecoin);
         uint256 scenarioTwoAmountOut = _getDexAmountOut(_collateralAmountToLiquidate, path2, _router);
 
-        if (scenarioOneAmountOut >= scenarioTwoAmountOut ) {
+        if (scenarioOneAmountOut >= scenarioTwoAmountOut) {
             // DEX (Collateral -> FXD)
             return (path1, scenarioOneAmountOut);
         } else {
@@ -383,7 +351,6 @@ contract LiquidationStrategy is
         uint256 amountToReceive = amounts[amounts.length - 1];
         return amountToReceive;
     }
-
 
     function _sellCollateral(
         address _token,

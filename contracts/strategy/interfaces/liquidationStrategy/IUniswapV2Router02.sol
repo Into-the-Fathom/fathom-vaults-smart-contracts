@@ -51,8 +51,5 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
         uint deadline
     ) external;
 
-    function getAmountsOut(
-        uint amountIn,
-        address[] calldata path
-    ) external view override returns (uint[] memory amounts);
+    function getAmountsOut(uint amountIn, address[] calldata path) external view override returns (uint[] memory amounts);
 }
