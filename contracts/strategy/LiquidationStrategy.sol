@@ -28,6 +28,7 @@ contract LiquidationStrategy is
     using BytesHelper for *;
     address public strategyManager;
     address public fixedSpreadLiquidationStrategy;
+    address public stablecoinAdapter;
     ERC20 public WXDC;
     ERC20 public fathomStablecoin;
     ERC20 public usdToken;
@@ -49,6 +50,14 @@ contract LiquidationStrategy is
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
+    event LogVaultLiquidationSuccess(
+        address indexed liquidatorAddress,
+        uint256 indexed debtValueToRepay,
+        uint256 indexed collateralAmountToLiquidate,
+        uint256 dexAmountOut,
+        uint256 stableSwapAmountOut,
+        address[] path
+    );
 
     modifier onlyStrategyManager() {
         require(msg.sender == strategyManager, "LiquidationStrategy: only strategy manager");
@@ -68,13 +77,15 @@ contract LiquidationStrategy is
         address _wrappedXDC, 
         address _bookKeeper,
         address _fathomStablecoin,
-        address _usdToken
+        address _usdToken,
+        address _stablecoinAdapter
     ) BaseStrategy(_asset, _name) {
         require(_strategyManager != address(0), "LiquidationStrategy: zero address");
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
         require(_wrappedXDC != address(0), "LiquidationStrategy: zero address");
         strategyManager = _strategyManager;
         fixedSpreadLiquidationStrategy = _fixedSpreadLiquidationStrategy;
+        stablecoinAdapter = _stablecoinAdapter;
         WXDC = ERC20(_wrappedXDC);
         bookKeeper = IBookKeeper(_bookKeeper);
         fathomStablecoin = ERC20(_fathomStablecoin);
@@ -145,7 +156,6 @@ contract LiquidationStrategy is
 
         // If the most profitable path does not return what we need, still can swap for what we can get.
         // in this case, the difference will be paid by the LiquidatorStrategy
-        uint256 minAmountOut = dexAmountOut < amountNeededToPayDebt ? dexAmountOut : amountNeededToPayDebt;
 
         /*
         * LiquidationStrategy's condition quadrant as of 16th Jan 2024
@@ -165,8 +175,49 @@ contract LiquidationStrategy is
 
 
         if (allowLoss == false) {
-            //since we don't loss, just depositRAD as much as amountNeededToPayDebt to stablecoinAdapter.
-        } else if (allowLoss){
+            // Condition #1 if there is no loss, sell on DEX 
+            if ( dexAmountOut >= amountNeededToPayDebt ) {
+                // @sangjun I think the below code can be refactored with the else if condition when allowLoss is true
+                    uint256 fathomStablecoinReceived = _sellCollateral(
+                    _vars.tokenAdapter.collateralToken(),
+                    path,
+                    _vars.router,
+                    _collateralAmountToLiquidate,
+                    dexAmountOut
+                );
+                if (fathomStablecoinReceived < amountNeededToPayDebt) {
+                    require(
+                        fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
+                        "vaultLendingCall: not enough to repay debt"
+                    );
+                }
+                emit LogVaultLiquidationSuccess(
+                    _vars.liquidatorAddress,
+                    _debtValueToRepay,
+                    _collateralAmountToLiquidate,
+                    dexAmountOut,
+                    fathomStablecoinReceived,
+                    path
+                );
+            } else {
+                // Condition #2 if there is loss, don't sell on DEX 
+                require(
+                    fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
+                    "vaultLendingCall: not enough to repay debt"
+                );
+                _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
+                emit LogVaultLiquidationSuccess(
+                    _vars.liquidatorAddress,
+                    _debtValueToRepay,
+                    _collateralAmountToLiquidate,
+                    dexAmountOut,
+                    amountNeededToPayDebt,
+                    path
+                );
+            }
+        } else {
+            // Condition #3 loss is allowed, so if there is loss, make this address pay for the loss.
+            uint256 minAmountOut = dexAmountOut < amountNeededToPayDebt ? dexAmountOut : amountNeededToPayDebt;
             //if allowLoss is true, then the LiquidatorStrategy will pay the difference of amountNeededToPayDebt and dexAmountOut
             uint256 fathomStablecoinReceived = _sellCollateral(
                 _vars.tokenAdapter.collateralToken(),
@@ -175,17 +226,41 @@ contract LiquidationStrategy is
                 _collateralAmountToLiquidate,
                 minAmountOut
             );
-        }
 
-        //but what if I just decide to keep the WXDC in this contract in case the dexAmountOut is less than amountNeededToPayDebt?
-        //or if a generate loss switch is on, the difference of amountNeededToPayDebt and dexAmountOut will be paid by the LiquidatorStrategy
+            // If we didn't receive enough to repay the debt - send the amount we received
+            // and the liquidator will try to pay the difference with its own funds.
+            // uint256 fundsUsedFromLiquidator;
+            if (fathomStablecoinReceived < amountNeededToPayDebt) {
+                require(
+                    fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt,
+                    "vaultLendingCall: not enough to repay debt"
+                );
+            }
+            // Deposit Fathom Stablecoin for liquidatorAddress
+            _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
+            emit LogVaultLiquidationSuccess(
+                _vars.liquidatorAddress,
+                _debtValueToRepay,
+                _collateralAmountToLiquidate,
+                dexAmountOut,
+                fathomStablecoinReceived,
+                path
+            );
+        }
     }
 
-    
 
+//0)make a WXDCInfo struct
+// it should have WXDC amount, and the amountNeededToPayDebt as the price of WXDC, last will be the average price of WXDC idle in this contract.
+//1)make a struct variable called IdleWXDC
+//2)make a fn that can sell WXDC to DEXes when it is profitable. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0.
+//3)emergency withdraw of WXDC should then adjust the idle WXDC amount
 
+    //I need to make a fn that can sell WXDC to DEXes when it is profitable, but how to know if it is profitable? Need to have some kind of records that can track the
+    //Price of WXDC when the WXDC is withdrawn. how? should I just keep track of the _debtValueToRepay along with the WXDc amount?
+    //Maybe I can record it in the condition that WXDC is not sold, get the average price of WXDC sitting in this contract.
     //I need to make fn for the fixed spread liquidation strategy to call like vaultLendingCall
-    //I need to make fn for the strategy manager to be able to sell WXDC to DEXes when it is profitable
+    //I need to make fn for the strategy manager to be able to sell WXDC to DEXes when it is profitable - done
     //I need to make fn for the strategy manager to be able to withdraw WXDC in emergency - done
     //I need to fn to change FSLS address - done
     // I need a fn to change strategy manager address - done
@@ -199,6 +274,16 @@ contract LiquidationStrategy is
 
     function supportsInterface(bytes4 _interfaceId) external pure returns (bool) {
         return type(IVaultLendingCallee).interfaceId == _interfaceId;
+    }
+
+
+    function _depositStablecoin(
+        uint256 _amount,
+        address _liquidatorAddress
+    ) internal {
+        fathomStablecoin.safeApprove(address(stablecoinAdapter), type(uint).max);
+        stablecoinAdapter.deposit(_liquidatorAddress, _amount, abi.encode(0));
+        fathomStablecoin.safeApprove(address(stablecoinAdapter), 0);
     }
 
     function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal {
