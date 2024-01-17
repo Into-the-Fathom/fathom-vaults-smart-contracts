@@ -23,6 +23,19 @@ contract LiquidationStrategy is
     IVaultLendingCallee, 
     IERC165
 {
+
+    struct LocalVars {
+        address liquidatorAddress;
+        IGenericTokenAdapter tokenAdapter;
+        IUniswapV2Router02 router;
+    }
+
+    struct WXDCInfo {
+        uint256 WXDCAmount;
+        uint256 amountNeededToPayDebt;
+        uint256 averagePriceOfWXDC;
+    }
+
     using SafeERC20 for ERC20;
     using SafeMath for uint256;
     using BytesHelper for *;
@@ -34,22 +47,19 @@ contract LiquidationStrategy is
     ERC20 public usdToken;
     IBookKeeper public bookKeeper;
     bool public allowLoss;
+    WXDCInfo public idleWXDC;
 
     // --- Math ---
     uint256 constant WAD = 10 ** 18;
     uint256 constant RAY = 10 ** 27;
 
-    struct LocalVars {
-        address liquidatorAddress;
-        //later need to import router and adapter interfaces
-        IGenericTokenAdapter tokenAdapter;
-        IUniswapV2Router02 router;
-    }
+
 
     event LogSetStrategyManager(address indexed _strategyManager);
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
+    event LogSellWXDC(address _token, address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
     event LogVaultLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
@@ -127,8 +137,42 @@ contract LiquidationStrategy is
 
     function shutdownWithdrawWXDC(uint256 _amount) external onlyStrategyManager { 
         require(_amount > 0, "LiquidationStrategy: zero amount");
+        require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
+        idleWXDC.WXDCAmount = idleWXDC.WXDCAmount - _amount;
+        if(idleWXDC.WXDCAmount == 0) {
+            idleWXDC.amountNeededToPayDebt = 0;
+            idleWXDC.averagePriceOfWXDC = 0;
+        }
         WXDC.safeTransfer(strategyManager, _amount);
         emit LogShutdownWithdrawWXDC(strategyManager, _amount);
+    }
+
+    function sellWXDC(
+        address _token,
+        address[] memory _path,
+        IUniswapV2Router02 _router,
+        uint256 _amount,
+        uint256 _minAmountOut
+    ) external onlyStrategyManager {
+        require(_token != address(0), "LiquidationStrategy: zero address");
+        require(_path.length > 0, "LiquidationStrategy: zero path");
+        require(address(_router) != address(0), "LiquidationStrategy: zero address");
+        require(_amount > 0, "LiquidationStrategy: zero amount");
+        require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
+
+        idleWXDC.WXDCAmount -= _amount;
+        if ( idleWXDC.WXDCAmount == 0 ) {
+            idleWXDC.amountNeededToPayDebt = 0;
+            idleWXDC.averagePriceOfWXDC = 0;
+        }
+        uint256 receivedAmount = _sellCollateral(
+            _token,
+            _path,
+            _router,
+            _amount,
+            _minAmountOut
+        );
+        emit LogSellWXDC(_token, _path, _router, _amount, _minAmountOut, receivedAmount);
     }
 
     function vaultLendingCall(
@@ -144,7 +188,7 @@ contract LiquidationStrategy is
         );
 
         // Retrieve collateral token
-        _retrieveCollateral(_vars.tokenAdapter, _collateralAmountToLiquidate);
+        uint256 retrievedCollateralAmount = _retrieveCollateral(_vars.tokenAdapter, _collateralAmountToLiquidate);
 
         uint256 amountNeededToPayDebt = _debtValueToRepay.div(RAY) + 1;
 
@@ -206,6 +250,9 @@ contract LiquidationStrategy is
                     "vaultLendingCall: not enough to repay debt"
                 );
                 _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
+                idleWXDC.WXDCAmount += retrievedCollateralAmount;
+                idleWXDC.amountNeededToPayDebt += amountNeededToPayDebt;
+                idleWXDC.averagePriceOfWXDC = idleWXDC.amountNeededToPayDebt.mul(WAD).div(idleWXDC.WXDCAmount);
                 emit LogVaultLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
@@ -250,11 +297,13 @@ contract LiquidationStrategy is
     }
 
 
-//0)make a WXDCInfo struct
+//0)make a WXDCInfo struct - done
 // it should have WXDC amount, and the amountNeededToPayDebt as the price of WXDC, last will be the average price of WXDC idle in this contract.
-//1)make a struct variable called IdleWXDC
-//2)make a fn that can sell WXDC to DEXes when it is profitable. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0.
-//3)emergency withdraw of WXDC should then adjust the idle WXDC amount
+//1)make a struct variable called IdleWXDC - done
+//2)make a fn that can sell WXDC to DEXes. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0. It is upto strategyManager to decide
+//if selling WXDC at some point is profitable or not - done
+// I guess I can let the StrategyManager call which DEX it wants to sell WXDC by passing the DEX or Router address as an argument. - done
+//3)emergency withdraw of WXDC should then adjust the idle WXDC amount - done
 
     //I need to make a fn that can sell WXDC to DEXes when it is profitable, but how to know if it is profitable? Need to have some kind of records that can track the
     //Price of WXDC when the WXDC is withdrawn. how? should I just keep track of the _debtValueToRepay along with the WXDc amount?
@@ -286,9 +335,12 @@ contract LiquidationStrategy is
         fathomStablecoin.safeApprove(address(stablecoinAdapter), 0);
     }
 
-    function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal {
+    function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal returns (uint256){
         bookKeeper.whitelist(address(_tokenAdapter));
+        uint256 balanceBefore = WXDC.balanceOf(address(this));
         _tokenAdapter.withdraw(address(this), _amount, abi.encode(address(this)));
+        uint256 balanceAfter = WXDC.balanceOf(address(this));
+        return balanceAfter.sub(balanceBefore);
     }
 
 
@@ -344,7 +396,7 @@ contract LiquidationStrategy is
             ERC20 _tokencoinAddress = ERC20(_path[_path.length - 1]);
             uint256 _tokencoinBalanceBefore = _tokencoinAddress.balanceOf(address(this));
 
-            // Check if enough FXD will be returned from the DEX to complete flash liquidation
+            // Check if enough FXD will be returned from the DEX
             uint256[] memory amounts = _router.getAmountsOut(_amount, _path);
 
             uint256 amountToReceive = amounts[amounts.length - 1];
