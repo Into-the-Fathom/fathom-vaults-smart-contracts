@@ -45,7 +45,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
     ERC20 public WXDC;
     ERC20 public fathomStablecoin;
     ERC20 public usdToken;
-    bool public allowLoss;
+    bool public allowLoss = true;
     WXDCInfo public idleWXDC;
 
     event LogSetStrategyManager(address indexed _strategyManager);
@@ -86,6 +86,10 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         require(_strategyManager != address(0), "LiquidationStrategy: zero address");
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
         require(_wrappedXDC != address(0), "LiquidationStrategy: zero address");
+        require(_bookKeeper != address(0), "LiquidationStrategy: zero address");
+        require(_fathomStablecoin != address(0), "LiquidationStrategy: zero address");
+        require(_usdToken != address(0), "LiquidationStrategy: zero address");
+        require(_stablecoinAdapter != address(0), "LiquidationStrategy: zero address");
         strategyManager = _strategyManager;
         fixedSpreadLiquidationStrategy = _fixedSpreadLiquidationStrategy;
         WXDC = ERC20(_wrappedXDC);
