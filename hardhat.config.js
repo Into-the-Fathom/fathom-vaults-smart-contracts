@@ -28,6 +28,10 @@ module.exports = {
             url: `http://127.0.0.1:8545`,
             accounts: [fs.readFileSync("./privateKey").toString()],
         },
+        localhost: {
+            url: `http://localhost:8545`,
+            accounts: [fs.readFileSync("./privateKey").toString()],
+        },
         hardhat: {
             accounts: {
                 // 1 million ETH in wei
