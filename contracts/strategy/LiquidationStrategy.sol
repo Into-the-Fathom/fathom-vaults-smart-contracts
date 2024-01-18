@@ -18,6 +18,10 @@ import "./libraries/BytesHelper.sol";
 
 // solhint-disable
 contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultLendingCallee, IERC165 {
+    using SafeERC20 for ERC20;
+    using SafeMath for uint256;
+    using BytesHelper for *; 
+ 
     struct LocalVars {
         address liquidatorAddress;
         IGenericTokenAdapter tokenAdapter;
@@ -30,22 +34,19 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         uint256 averagePriceOfWXDC;
     }
 
-    using SafeERC20 for ERC20;
-    using SafeMath for uint256;
-    using BytesHelper for *;
+    // --- Math ---
+    uint256 constant WAD = 10 ** 18;
+    uint256 constant RAY = 10 ** 27;
+
+    IStablecoinAdapter public stablecoinAdapter;
+    IBookKeeper public bookKeeper;
     address public strategyManager;
     address public fixedSpreadLiquidationStrategy;
     ERC20 public WXDC;
     ERC20 public fathomStablecoin;
     ERC20 public usdToken;
-    IStablecoinAdapter public stablecoinAdapter;
-    IBookKeeper public bookKeeper;
     bool public allowLoss;
     WXDCInfo public idleWXDC;
-
-    // --- Math ---
-    uint256 constant WAD = 10 ** 18;
-    uint256 constant RAY = 10 ** 27;
 
     event LogSetStrategyManager(address indexed _strategyManager);
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
@@ -182,10 +183,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
             _vars.tokenAdapter.collateralToken(),
             _collateralAmountToLiquidate
         );
-
-        // If the most profitable path does not return what we need, still can swap for what we can get.
-        // in this case, the difference will be paid by the LiquidatorStrategy
-
+        
         /*
          * LiquidationStrategy's condition quadrant as of 16th Jan 2024
          *
@@ -307,7 +305,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
     function _retrieveCollateral(IGenericTokenAdapter _tokenAdapter, uint256 _amount) internal returns (uint256) {
         bookKeeper.whitelist(address(_tokenAdapter));
         uint256 balanceBefore = WXDC.balanceOf(address(this));
-        _tokenAdapter.withdraw(address(this), _amount, abi.encode(address(this)));
+        _tokenAdapter.withdraw(address(this), _amount, abi.encode(0));
         uint256 balanceAfter = WXDC.balanceOf(address(this));
         return balanceAfter.sub(balanceBefore);
     }
