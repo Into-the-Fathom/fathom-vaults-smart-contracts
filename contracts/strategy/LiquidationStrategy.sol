@@ -79,7 +79,6 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         address _fixedSpreadLiquidationStrategy,
         address _wrappedXDC,
         address _bookKeeper,
-        address _fathomStablecoin,
         address _usdToken,
         address _stablecoinAdapter
     ) BaseStrategy(_asset, _name) {
@@ -87,7 +86,6 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
         require(_wrappedXDC != address(0), "LiquidationStrategy: zero address");
         require(_bookKeeper != address(0), "LiquidationStrategy: zero address");
-        require(_fathomStablecoin != address(0), "LiquidationStrategy: zero address");
         require(_usdToken != address(0), "LiquidationStrategy: zero address");
         require(_stablecoinAdapter != address(0), "LiquidationStrategy: zero address");
         strategyManager = _strategyManager;
@@ -95,7 +93,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         WXDC = ERC20(_wrappedXDC);
         bookKeeper = IBookKeeper(_bookKeeper);
         stablecoinAdapter = IStablecoinAdapter(_stablecoinAdapter);
-        fathomStablecoin = ERC20(_fathomStablecoin);
+        fathomStablecoin = ERC20(_asset);
         usdToken = ERC20(_usdToken);
     }
 
