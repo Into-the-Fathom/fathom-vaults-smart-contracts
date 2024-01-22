@@ -2,7 +2,7 @@
 // Copyright Fathom 2023
 pragma solidity 0.8.19;
 
-import "@openzeppelin/contracts/security/Pausable.sol";
+// import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -17,7 +17,9 @@ import { IBookKeeper } from "./interfaces/liquidationStrategy/IBookKeeper.sol";
 import "./libraries/BytesHelper.sol";
 
 // solhint-disable
-contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashLendingCallee, IERC165 {
+contract LiquidationStrategy is BaseStrategy,
+//  Pausable, 
+ReentrancyGuard, IFlashLendingCallee, IERC165 {
     using SafeERC20 for ERC20;
     using SafeMath for uint256;
     using BytesHelper for *; 
@@ -53,7 +55,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
     event LogSellWXDC(address _token, address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
-    event LogFlashLiquidationSuccess(
+    event LogVaultLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
         uint256 indexed collateralAmountToLiquidate,
@@ -171,7 +173,9 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
         uint256 _debtValueToRepay, // [rad]
         uint256 _collateralAmountToLiquidate, // [wad]
         bytes calldata data
-    ) external onlyFixedSpreadLiquidationStrategy whenNotPaused nonReentrant {
+    ) external onlyFixedSpreadLiquidationStrategy
+    //  whenNotPaused 
+     nonReentrant {
         LocalVars memory _vars;
         (_vars.liquidatorAddress, _vars.tokenAdapter, _vars.router) = abi.decode(data, (address, IGenericTokenAdapter, IUniswapV2Router02));
 
@@ -214,9 +218,9 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
                     dexAmountOut
                 );
                 if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
+                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
                 }
-                emit LogFlashLiquidationSuccess(
+                emit LogVaultLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -226,12 +230,12 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
                 );
             } else {
                 // Condition #2 if there is loss, don't sell on DEX
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
                 _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
                 idleWXDC.WXDCAmount += retrievedCollateralAmount;
                 idleWXDC.amountNeededToPayDebt += amountNeededToPayDebt;
                 idleWXDC.averagePriceOfWXDC = idleWXDC.amountNeededToPayDebt.mul(WAD).div(idleWXDC.WXDCAmount);
-                emit LogFlashLiquidationSuccess(
+                emit LogVaultLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -256,11 +260,11 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
             // and the liquidator will try to pay the difference with its own funds.
             // uint256 fundsUsedFromLiquidator;
             if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
             }
             // Deposit Fathom Stablecoin for liquidatorAddress
             _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
-            emit LogFlashLiquidationSuccess(
+            emit LogVaultLiquidationSuccess(
                 _vars.liquidatorAddress,
                 _debtValueToRepay,
                 _collateralAmountToLiquidate,
@@ -288,6 +292,13 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
     //I need to fn to change FSLS address - done
     // I need a fn to change strategy manager address - done
 
+    // function pause() external onlyStrategyManager {
+    //     _pause();
+    // }
+
+    // function unpause() external onlyStrategyManager {
+    //     _unpause();
+    // }
     function _emergencyWithdraw(uint256 _amount) internal override {
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= asset.balanceOf(address(this)), "LiquidationStrategy: wrong amount");
