@@ -53,7 +53,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
     event LogSellWXDC(address _token, address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
-    event LogVaultLiquidationSuccess(
+    event LogFlashLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
         uint256 indexed collateralAmountToLiquidate,
@@ -214,9 +214,9 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
                     dexAmountOut
                 );
                 if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
                 }
-                emit LogVaultLiquidationSuccess(
+                emit LogFlashLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -226,12 +226,12 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
                 );
             } else {
                 // Condition #2 if there is loss, don't sell on DEX
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
                 _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
                 idleWXDC.WXDCAmount += retrievedCollateralAmount;
                 idleWXDC.amountNeededToPayDebt += amountNeededToPayDebt;
                 idleWXDC.averagePriceOfWXDC = idleWXDC.amountNeededToPayDebt.mul(WAD).div(idleWXDC.WXDCAmount);
-                emit LogVaultLiquidationSuccess(
+                emit LogFlashLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -256,11 +256,11 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
             // and the liquidator will try to pay the difference with its own funds.
             // uint256 fundsUsedFromLiquidator;
             if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
             }
             // Deposit Fathom Stablecoin for liquidatorAddress
             _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
-            emit LogVaultLiquidationSuccess(
+            emit LogFlashLiquidationSuccess(
                 _vars.liquidatorAddress,
                 _debtValueToRepay,
                 _collateralAmountToLiquidate,
@@ -405,5 +405,5 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashL
 
     function _deployFunds(uint256 _amount) internal pure override {}
 
-    function _freeFunds(uint256 _amount) internal pure override {}
+    function _freeFunds(uint256 _amount)  internal pure override {}
 }
