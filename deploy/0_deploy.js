@@ -139,7 +139,7 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     const vaultTokenName = "FXD-fVault-1";
     const vaultTokenSymbol = "fvFXD1";
 
-    const assetAddress = fathomStablecoinAddress; // Real asset address
+    const assetAddress = fathomStablecoinAddress; // Real assetInstance address
     const assetInstance = await ethers.getContractAt("ERC20", assetAddress);
 
     const liquidationStrategyInstance = await ethers.getContractAt("LiquidationStrategy", liquidationStrategy.address);
@@ -189,11 +189,11 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     console.log("Balance of Owner in Tokens = ", ethers.formatUnits(balanceInTokens, 18));
     let balanceVaultInShares = await vault.balanceOf(vaultAddress);
     console.log("Balance of Vault in Shares = ", ethers.formatUnits(balanceVaultInShares, 18));
-    let balanceVaultInTokens = await asset.balanceOf(vaultAddress);
+    let balanceVaultInTokens = await assetInstance.balanceOf(vaultAddress);
     console.log("Balance of Vault in Tokens = ", ethers.formatUnits(balanceVaultInTokens, 18));
-    let balanceStrategy = await asset.balanceOf(strategy.target);
+    let balanceStrategy = await assetInstance.balanceOf(strategy.address);
     console.log("Balance of Strategy = ", ethers.formatUnits(balanceStrategy, 18));
-    let accountantShares = await vault.balanceOf(accountantAddress);
+    let accountantShares = await vault.balanceOf(genericAccountant.address);
     console.log("Shares of Accountant = ", ethers.formatUnits(accountantShares, 18));
 
     // Simulate a deposit
@@ -208,10 +208,45 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     console.log("Balance of Owner in Tokens = ", ethers.formatUnits(balanceInTokens, 18));
     balanceVaultInShares = await vault.balanceOf(vaultAddress);
     console.log("Balance of Vault in Shares = ", ethers.formatUnits(balanceVaultInShares, 18));
-    balanceVaultInTokens = await asset.balanceOf(vaultAddress);
+    balanceVaultInTokens = await assetInstance.balanceOf(vaultAddress);
     console.log("Balance of Vault in Tokens = ", ethers.formatUnits(balanceVaultInTokens, 18));
-    balanceStrategy = await asset.balanceOf(strategy.target);
+    balanceStrategy = await assetInstance.balanceOf(strategy.address);
     console.log("Balance of Strategy = ", ethers.formatUnits(balanceStrategy, 18));
+
+
+    // Setup Strategy
+    console.log("Adding Strategy to the Vault...");
+    const addStrategyTx = await vault.addStrategy(liquidationStrategy.address, { gasLimit: "0x1000000" });
+    await addStrategyTx.wait();
+    console.log("Setting Vault's Strategy maxDebt...");
+    const updateMaxDebtForStrategyTx = await vault.updateMaxDebtForStrategy(liquidationStrategy.address, maxDebt, { gasLimit: "0x1000000" });
+    await updateMaxDebtForStrategyTx.wait();
+    console.log("Update Vault's Strategy debt...");
+    const updateDebtTx = await vault.updateDebt(liquidationStrategy.address, balanceVaultInTokens, { gasLimit: "0x1000000" });
+    await updateDebtTx.wait();
+
+    console.log("Updating balances...");
+    balanceInShares = await vault.balanceOf(deployer);
+    console.log("Balance of Owner in Shares = ", ethers.formatUnits(balanceInShares, 18));
+    balanceInTokens = await vault.convertToAssets(balanceInShares);
+    console.log("Balance of Owner in Tokens = ", ethers.formatUnits(balanceInTokens, 18));
+    balanceVaultInShares = await vault.balanceOf(vaultAddress);
+    console.log("Balance of Vault in Shares = ", ethers.formatUnits(balanceVaultInShares, 18));
+    balanceVaultInTokens = await assetInstance.balanceOf(vaultAddress);
+    console.log("Balance of Vault in Tokens = ", ethers.formatUnits(balanceVaultInTokens, 18));
+    balanceStrategy = await assetInstance.balanceOf(liquidationStrategy.address);
+    console.log("Balance of Strategy = ", ethers.formatUnits(balanceStrategy, 18));
+    let pricePerShare = await vault.pricePerShare();
+    console.log("Price Per Share = ", ethers.formatUnits(pricePerShare, 18));
+    let vaultStrategyBalance = await liqStrategyTokenizedStrategyInstance.balanceOf(vaultAddress);
+    console.log("Vault Balance on Strategy = ", ethers.formatUnits(vaultStrategyBalance, 18));
+    let vaultStrategyBalanceInTokens = await liqStrategyTokenizedStrategyInstance.convertToAssets(vaultStrategyBalance);
+    console.log("Vault Balance on Strategy in Tokens = ", ethers.formatUnits(vaultStrategyBalanceInTokens, 18));
+    accountantShares = await vault.balanceOf(genericAccountant.address);
+    console.log("Shares of Accountant = ", ethers.formatUnits(accountantShares, 18));
+    let fullProfitUnlockDate = (await vault.fullProfitUnlockDate()).toString();
+    console.log("Full Profit Unlock Date = ", fullProfitUnlockDate);
+
 
 };
 
