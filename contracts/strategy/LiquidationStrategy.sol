@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./BaseStrategy.sol";
-import "./interfaces/liquidationStrategy/IVaultLendingCallee.sol";
+import "./interfaces/liquidationStrategy/IFlashLendingCallee.sol";
 import "./interfaces/liquidationStrategy/IERC165.sol";
 import "./interfaces/liquidationStrategy/IGenericTokenAdapter.sol";
 import "./interfaces/liquidationStrategy/IUniswapV2Router02.sol";
@@ -17,7 +17,7 @@ import { IBookKeeper } from "./interfaces/liquidationStrategy/IBookKeeper.sol";
 import "./libraries/BytesHelper.sol";
 
 // solhint-disable
-contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultLendingCallee, IERC165 {
+contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IFlashLendingCallee, IERC165 {
     using SafeERC20 for ERC20;
     using SafeMath for uint256;
     using BytesHelper for *; 
@@ -166,7 +166,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
         emit LogSellWXDC(_token, _path, _router, _amount, _minAmountOut, receivedAmount);
     }
 
-    function vaultLendingCall(
+    function flashLendingCall(
         address,
         uint256 _debtValueToRepay, // [rad]
         uint256 _collateralAmountToLiquidate, // [wad]
@@ -295,7 +295,7 @@ contract LiquidationStrategy is BaseStrategy, Pausable, ReentrancyGuard, IVaultL
     }
 
     function supportsInterface(bytes4 _interfaceId) external pure returns (bool) {
-        return type(IVaultLendingCallee).interfaceId == _interfaceId;
+        return type(IFlashLendingCallee).interfaceId == _interfaceId;
     }
 
     function _depositStablecoin(uint256 _amount, address _liquidatorAddress) internal {
