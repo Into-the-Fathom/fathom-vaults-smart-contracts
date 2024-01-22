@@ -85,7 +85,7 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     // Set these variables to the appropriate addresses for your deployment
     const strategyManagerAddress = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"; // Replace with actual strategy manager address
     //using account#0 from hardhat node for strategyManagerAddress
-    const fixedSpreadLiquidationStrategyAddress = "0x610178dA211FEF7D417bC0e6FeD39F05609AD788"; // Replace with actual fixed spread liquidation strategy address
+    const fixedSpreadLiquidationStrategyAddress = "0x524ae63AB2D30853578E75eA0A758E0DA2d59814"; // Replace with actual fixed spread liquidation strategy address
     //need to get the FSLS address from the terminal log from XDC fork project.
     const wrappedXDCAddress = "0x951857744785e80e2de051c32ee7b25f9c458c42"; // Replace with actual wrapped XDC address
     const bookKeeperAddress = "0x6FD3f049DF9e1886e1DFc1A034D379efaB0603CE"; // Replace with actual bookkeeper address
