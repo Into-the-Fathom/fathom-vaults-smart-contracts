@@ -55,7 +55,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
     event LogSellWXDC(address _token, address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
-    event LogVaultLiquidationSuccess(
+    event LogFlashLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
         uint256 indexed collateralAmountToLiquidate,
@@ -218,9 +218,9 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
                     dexAmountOut
                 );
                 if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                    require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
                 }
-                emit LogVaultLiquidationSuccess(
+                emit LogFlashLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -230,12 +230,12 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
                 );
             } else {
                 // Condition #2 if there is loss, don't sell on DEX
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
                 _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
                 idleWXDC.WXDCAmount += retrievedCollateralAmount;
                 idleWXDC.amountNeededToPayDebt += amountNeededToPayDebt;
                 idleWXDC.averagePriceOfWXDC = idleWXDC.amountNeededToPayDebt.mul(WAD).div(idleWXDC.WXDCAmount);
-                emit LogVaultLiquidationSuccess(
+                emit LogFlashLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
                     _collateralAmountToLiquidate,
@@ -260,11 +260,11 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
             // and the liquidator will try to pay the difference with its own funds.
             // uint256 fundsUsedFromLiquidator;
             if (fathomStablecoinReceived < amountNeededToPayDebt) {
-                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "vaultLendingCall: not enough to repay debt");
+                require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
             }
             // Deposit Fathom Stablecoin for liquidatorAddress
             _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
-            emit LogVaultLiquidationSuccess(
+            emit LogFlashLiquidationSuccess(
                 _vars.liquidatorAddress,
                 _debtValueToRepay,
                 _collateralAmountToLiquidate,
@@ -286,7 +286,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     //I need to make a fn that can sell WXDC to DEXes when it is profitable, but how to know if it is profitable? Need to have some kind of records that can track the
     //Price of WXDC when the WXDC is withdrawn. how? should I just keep track of the _debtValueToRepay along with the WXDc amount?
     //Maybe I can record it in the condition that WXDC is not sold, get the average price of WXDC sitting in this contract.
-    //I need to make fn for the fixed spread liquidation strategy to call like vaultLendingCall
+    //I need to make fn for the fixed spread liquidation strategy to call like flashLendingCall
     //I need to make fn for the strategy manager to be able to sell WXDC to DEXes when it is profitable - done
     //I need to make fn for the strategy manager to be able to withdraw WXDC in emergency - done
     //I need to fn to change FSLS address - done
