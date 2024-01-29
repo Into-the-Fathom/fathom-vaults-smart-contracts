@@ -220,6 +220,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
                 if (fathomStablecoinReceived < amountNeededToPayDebt) {
                     require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
                 }
+                _depositStablecoin(amountNeededToPayDebt, _vars.liquidatorAddress);
                 emit LogFlashLiquidationSuccess(
                     _vars.liquidatorAddress,
                     _debtValueToRepay,
