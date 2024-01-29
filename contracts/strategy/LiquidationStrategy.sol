@@ -2,7 +2,6 @@
 // Copyright Fathom 2023
 pragma solidity 0.8.19;
 
-// import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -18,7 +17,6 @@ import "./libraries/BytesHelper.sol";
 
 // solhint-disable
 contract LiquidationStrategy is BaseStrategy,
-//  Pausable, 
 ReentrancyGuard, IFlashLendingCallee, IERC165 {
     using SafeERC20 for ERC20;
     using SafeMath for uint256;
@@ -209,7 +207,6 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         if (allowLoss == false) {
             // Condition #1 if there is no loss, sell on DEX
             if (dexAmountOut >= amountNeededToPayDebt) {
-                // @sangjun I think the below code can be refactored with the else if condition when allowLoss is true
                 uint256 fathomStablecoinReceived = _sellCollateral(
                     _vars.tokenAdapter.collateralToken(),
                     path,
@@ -259,7 +256,6 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
 
             // If we didn't receive enough to repay the debt - send the amount we received
             // and the liquidator will try to pay the difference with its own funds.
-            // uint256 fundsUsedFromLiquidator;
             if (fathomStablecoinReceived < amountNeededToPayDebt) {
                 require(fathomStablecoin.balanceOf(address(this)) >= amountNeededToPayDebt, "flashLendingCall: not enough to repay debt");
             }
@@ -276,30 +272,6 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         }
     }
 
-    //0)make a WXDCInfo struct - done
-    // it should have WXDC amount, and the amountNeededToPayDebt as the price of WXDC, last will be the average price of WXDC idle in this contract.
-    //1)make a struct variable called IdleWXDC - done
-    //2)make a fn that can sell WXDC to DEXes. Maybe one DEX or more. Let's start from just one DEX, FathomSwap. Once swap is done, update WXDC amount to 0, price to 0. average to 0. It is upto strategyManager to decide
-    //if selling WXDC at some point is profitable or not - done
-    // I guess I can let the StrategyManager call which DEX it wants to sell WXDC by passing the DEX or Router address as an argument. - done
-    //3)emergency withdraw of WXDC should then adjust the idle WXDC amount - done
-
-    //I need to make a fn that can sell WXDC to DEXes when it is profitable, but how to know if it is profitable? Need to have some kind of records that can track the
-    //Price of WXDC when the WXDC is withdrawn. how? should I just keep track of the _debtValueToRepay along with the WXDc amount?
-    //Maybe I can record it in the condition that WXDC is not sold, get the average price of WXDC sitting in this contract.
-    //I need to make fn for the fixed spread liquidation strategy to call like flashLendingCall
-    //I need to make fn for the strategy manager to be able to sell WXDC to DEXes when it is profitable - done
-    //I need to make fn for the strategy manager to be able to withdraw WXDC in emergency - done
-    //I need to fn to change FSLS address - done
-    // I need a fn to change strategy manager address - done
-
-    // function pause() external onlyStrategyManager {
-    //     _pause();
-    // }
-
-    // function unpause() external onlyStrategyManager {
-    //     _unpause();
-    // }
     function _emergencyWithdraw(uint256 _amount) internal override {
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= asset.balanceOf(address(this)), "LiquidationStrategy: wrong amount");
@@ -324,7 +296,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         return balanceAfter.sub(balanceBefore);
     }
 
-    // _computeMostProfitablePath should be upgraded/updated once curvePool launches and DEX pool of USDT/FXD will be drained.
+    // @dev _computeMostProfitablePath should be upgraded/updated once curvePool launches and DEX pool of USDT/FXD will be drained.
     // an alternative solution can be to involve xSwap, but needs more research.
     // above problem is not the problem for the current implementation(as of 16th of Jan) but possible future issue.
     function _computeMostProfitablePath(
