@@ -130,10 +130,10 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     // Vault
 
     const totalGain = ethers.parseUnits("10", 18);
-    // Deposit Amount when WXDC price is 1 USD
-    // const depositAmount = ethers.parseUnits("450", 18);
-    // Deposit Amount when wXDC price is 0.02 USD
-    const depositAmount = ethers.parseUnits("90", 18);
+    // opening position when XDC price is 1 USD
+    const depositAmount = ethers.parseUnits("450", 18);
+    // opening position when XDC price is 0.02 USD
+    // const depositAmount = ethers.parseUnits("90", 18);
     const depositLimit = ethers.parseUnits("500", 18);
     const maxDebt = ethers.parseUnits("500", 18);
     const profitMaxUnlockTime = 604800; // 7 days seconds

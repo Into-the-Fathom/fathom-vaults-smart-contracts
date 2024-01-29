@@ -52,7 +52,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
-    event LogSellWXDC(address _token, address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
+    event LogSellWXDC(address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
     event LogFlashLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
@@ -116,12 +116,14 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
 
     function setStrategyManager(address _strategyManager) external onlyStrategyManager {
         require(_strategyManager != address(0), "LiquidationStrategy: zero address");
+        require(_strategyManager != strategyManager, "LiquidationStrategy: same strategy manager");
         strategyManager = _strategyManager;
         emit LogSetStrategyManager(_strategyManager);
     }
 
     function setFixedSpreadLiquidationStrategy(address _fixedSpreadLiquidationStrategy) external onlyStrategyManager {
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
+        require(_fixedSpreadLiquidationStrategy != fixedSpreadLiquidationStrategy, "LiquidationStrategy: same fixed spread liquidation strategy");
         fixedSpreadLiquidationStrategy = _fixedSpreadLiquidationStrategy;
         emit LogSetFixedSpreadLiquidationStrategy(_fixedSpreadLiquidationStrategy);
     }
@@ -145,13 +147,11 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     }
 
     function sellWXDC(
-        address _token,
         address[] memory _path,
         IUniswapV2Router02 _router,
         uint256 _amount,
         uint256 _minAmountOut
     ) external onlyStrategyManager {
-        require(_token != address(0), "LiquidationStrategy: zero address");
         require(_path.length > 0, "LiquidationStrategy: zero path");
         require(address(_router) != address(0), "LiquidationStrategy: zero address");
         require(_amount > 0, "LiquidationStrategy: zero amount");
@@ -162,8 +162,10 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
-        uint256 receivedAmount = _sellCollateral(_token, _path, _router, _amount, _minAmountOut);
-        emit LogSellWXDC(_token, _path, _router, _amount, _minAmountOut, receivedAmount);
+
+        //path can also just be encoded here, so that it could get rid of one parameter
+        uint256 receivedAmount = _sellCollateral(address(WXDC), _path, _router, _amount, _minAmountOut);
+        emit LogSellWXDC(_path, _router, _amount, _minAmountOut, receivedAmount);
     }
 
     function flashLendingCall(
@@ -189,7 +191,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         );
         
         /*
-         * LiquidationStrategy's condition quadrant as of 16th Jan 2024
+         * LiquidationStrategy's condition quadrant
          *
          * +------------------+--------------------------------------+--------------------------------------+
          * |                  | Sell WXDC to DEX                     | Not Sell WXDC to DEX                 |
