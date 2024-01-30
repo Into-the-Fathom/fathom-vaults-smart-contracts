@@ -52,7 +52,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
-    event LogSellWXDC(address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _receivedAmount);
+    event LogSellWXDC(address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _dexAmountOut,  uint256 _receivedAmount);
     event LogFlashLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
@@ -147,12 +147,10 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     }
 
     function sellWXDC(
-        address[] memory _path,
         IUniswapV2Router02 _router,
         uint256 _amount,
         uint256 _minAmountOut
     ) external onlyStrategyManager {
-        require(_path.length > 0, "LiquidationStrategy: zero path");
         require(address(_router) != address(0), "LiquidationStrategy: zero address");
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
@@ -163,9 +161,16 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
             idleWXDC.averagePriceOfWXDC = 0;
         }
 
-        //path can also just be encoded here, so that it could get rid of one parameter
-        uint256 receivedAmount = _sellCollateral(address(WXDC), _path, _router, _amount, _minAmountOut);
-        emit LogSellWXDC(_path, _router, _amount, _minAmountOut, receivedAmount);
+        (address[] memory path, uint256 dexAmountOut) = _computeMostProfitablePath(
+            _router,
+            address(WXDC),
+            _amount
+        );
+        
+        require(_minAmountOut <= dexAmountOut, "LiquidationStrategy: DEX can't give enough amount");
+
+        uint256 receivedAmount = _sellCollateral(address(WXDC), path, _router, _amount, _minAmountOut);
+        emit LogSellWXDC(path, _router, _amount, _minAmountOut, dexAmountOut, receivedAmount);
     }
 
     function flashLendingCall(
