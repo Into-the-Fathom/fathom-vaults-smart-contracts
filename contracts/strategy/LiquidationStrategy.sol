@@ -16,12 +16,11 @@ import { IBookKeeper } from "./interfaces/liquidationStrategy/IBookKeeper.sol";
 import "./libraries/BytesHelper.sol";
 
 // solhint-disable
-contract LiquidationStrategy is BaseStrategy,
-ReentrancyGuard, IFlashLendingCallee, IERC165 {
+contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCallee, IERC165 {
     using SafeERC20 for ERC20;
     using SafeMath for uint256;
-    using BytesHelper for *; 
- 
+    using BytesHelper for *;
+
     struct LocalVars {
         address liquidatorAddress;
         IGenericTokenAdapter tokenAdapter;
@@ -52,7 +51,14 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
     event LogSetFixedSpreadLiquidationStrategy(address indexed _fixedSpreadLiquidationStrategy);
     event LogShutdownWithdrawWXDC(address indexed _strategyManager, uint256 _amount);
     event LogAllowLoss(bool _allowLoss);
-    event LogSellWXDC(address[] _path, IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut, uint256 _dexAmountOut,  uint256 _receivedAmount);
+    event LogSellWXDC(
+        address[] _path,
+        IUniswapV2Router02 _router,
+        uint256 _amount,
+        uint256 _minAmountOut,
+        uint256 _dexAmountOut,
+        uint256 _receivedAmount
+    );
     event LogFlashLiquidationSuccess(
         address indexed liquidatorAddress,
         uint256 indexed debtValueToRepay,
@@ -146,11 +152,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         emit LogShutdownWithdrawWXDC(strategyManager, _amount);
     }
 
-    function sellWXDC(
-        IUniswapV2Router02 _router,
-        uint256 _amount,
-        uint256 _minAmountOut
-    ) external onlyStrategyManager {
+    function sellWXDC(IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut) external onlyStrategyManager {
         require(address(_router) != address(0), "LiquidationStrategy: zero address");
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
@@ -161,12 +163,8 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
             idleWXDC.averagePriceOfWXDC = 0;
         }
 
-        (address[] memory path, uint256 dexAmountOut) = _computeMostProfitablePath(
-            _router,
-            address(WXDC),
-            _amount
-        );
-        
+        (address[] memory path, uint256 dexAmountOut) = _computeMostProfitablePath(_router, address(WXDC), _amount);
+
         require(_minAmountOut <= dexAmountOut, "LiquidationStrategy: DEX can't give enough amount");
 
         uint256 receivedAmount = _sellCollateral(address(WXDC), path, _router, _amount, _minAmountOut);
@@ -178,9 +176,12 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
         uint256 _debtValueToRepay, // [rad]
         uint256 _collateralAmountToLiquidate, // [wad]
         bytes calldata data
-    ) external onlyFixedSpreadLiquidationStrategy
-    //  whenNotPaused 
-     nonReentrant {
+    )
+        external
+        onlyFixedSpreadLiquidationStrategy
+        //  whenNotPaused
+        nonReentrant
+    {
         LocalVars memory _vars;
         (_vars.liquidatorAddress, _vars.tokenAdapter, _vars.router) = abi.decode(data, (address, IGenericTokenAdapter, IUniswapV2Router02));
 
@@ -194,7 +195,7 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
             _vars.tokenAdapter.collateralToken(),
             _collateralAmountToLiquidate
         );
-        
+
         /*
          * LiquidationStrategy's condition quadrant
          *
@@ -396,5 +397,5 @@ ReentrancyGuard, IFlashLendingCallee, IERC165 {
 
     function _deployFunds(uint256 _amount) internal pure override {}
 
-    function _freeFunds(uint256 _amount)  internal pure override {}
+    function _freeFunds(uint256 _amount) internal pure override {}
 }

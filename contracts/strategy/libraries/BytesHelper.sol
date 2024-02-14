@@ -5,13 +5,15 @@ pragma solidity 0.8.19;
  * @title Bytes Helper
  * @dev Different operations with bytes
  */
+
+// solhint-disable custom-errors
 library BytesHelper {
     /**
      * @notice Get pointer to bytes array
      * @param bts Bytes array
      */
-    function _getPointer(bytes memory bts) internal pure returns (uint) {
-        uint ptr;
+    function _getPointer(bytes memory bts) internal pure returns (uint256) {
+        uint256 ptr;
         assembly {
             ptr := bts
         }
@@ -51,7 +53,7 @@ library BytesHelper {
      * @param value Value to be converted to address
      */
     function _bytesToAddress(bytes memory value) internal pure returns (address) {
-        return address(uint160(uint(_bytesToBytes32(value))));
+        return address(uint160(uint256(_bytesToBytes32(value))));
     }
 
     /**
@@ -67,25 +69,25 @@ library BytesHelper {
      * @param value Value to be converted to address
      */
     function _bytesToAddressShiftRight(bytes memory value) internal pure returns (address) {
-        return address(uint160(uint(_bytesToBytes32(value)) >> 96));
+        return address(uint160(uint256(_bytesToBytes32(value)) >> 96));
     }
 
     /**
-     * @notice Cut first 32 bytes and converts it to uint
+     * @notice Cut first 32 bytes and converts it to uint256
      * @param data Bytes array
      */
-    function _bytesToUInt(bytes memory data) internal pure returns (uint result) {
+    function _bytesToUInt(bytes memory data) internal pure returns (uint256 result) {
         assembly {
             result := mload(add(data, 0x20))
         }
     }
 
     /**
-     * @notice Bytes -> uint array
+     * @notice Bytes -> uint256 array
      * @param data Bytes array
      */
-    function _bytesToUIntArray(bytes memory data) internal pure returns (uint[] memory result) {
-        return abi.decode(data, (uint[]));
+    function _bytesToUIntArray(bytes memory data) internal pure returns (uint256[] memory result) {
+        return abi.decode(data, (uint256[]));
     }
 
     /**
@@ -93,7 +95,7 @@ library BytesHelper {
      * @param data Bytes array
      * @param start Start index
      */
-    function _bytesToUInt8(bytes memory data, uint start) internal pure returns (uint8 result) {
+    function _bytesToUInt8(bytes memory data, uint256 start) internal pure returns (uint8 result) {
         require(data.length >= (start + 1), "_bytesToUInt8: Wrong start");
 
         assembly {
@@ -112,21 +114,21 @@ library BytesHelper {
     }
 
     /**
-     * @notice Cut first 32 bytes and converts it to int
+     * @notice Cut first 32 bytes and converts it to int256
      * @param data Bytes array
      */
-    function _bytesToInt(bytes memory data) internal pure returns (int result) {
+    function _bytesToInt(bytes memory data) internal pure returns (int256 result) {
         assembly {
             result := mload(add(data, 0x20))
         }
     }
 
     /**
-     * @notice Cut first 32 bytes and converts it to int array
+     * @notice Cut first 32 bytes and converts it to int256 array
      * @param data Bytes array
      */
-    function _bytesToIntArray(bytes memory data) internal pure returns (int[] memory result) {
-        return abi.decode(data, (int[]));
+    function _bytesToIntArray(bytes memory data) internal pure returns (int256[] memory result) {
+        return abi.decode(data, (int256[]));
     }
 
     /**
@@ -162,20 +164,20 @@ library BytesHelper {
     }
 
     /**
-     * @notice Converts 32 bytes to uint
+     * @notice Converts 32 bytes to uint256
      * @param data Bytes array
      */
-    function _asciiBytesToUInt(bytes memory data) internal pure returns (uint result) {
+    function _asciiBytesToUInt(bytes memory data) internal pure returns (uint256 result) {
         require(data.length <= 32, "_asciiBytesToUInt: Overflow");
 
         return _asciiBytesToUIntImpl(data);
     }
 
     /**
-     * @notice Converts 32 bytes to int
+     * @notice Converts 32 bytes to int256
      * @param data Bytes array
      */
-    function _asciiBytesToInt(bytes memory data) internal pure returns (int result) {
+    function _asciiBytesToInt(bytes memory data) internal pure returns (int256 result) {
         require(data.length > 0 && data.length <= 32, "_asciiBytesToInt: Overflow");
         bool isNegative = false;
         if (data[0] == "-") {
@@ -183,14 +185,14 @@ library BytesHelper {
             data[0] = "0";
         }
 
-        uint uintResult = _asciiBytesToUIntImpl(data);
+        uint256 uintResult = _asciiBytesToUIntImpl(data);
 
-        return isNegative ? int(uintResult) * -1 : int(uintResult);
+        return isNegative ? int256(uintResult) * -1 : int256(uintResult);
     }
 
-    function _asciiBytesToUIntImpl(bytes memory data) internal pure returns (uint result) {
-        for (uint i = 0; i < data.length; i++) {
-            uint char = uint(uint8(data[i]));
+    function _asciiBytesToUIntImpl(bytes memory data) internal pure returns (uint256 result) {
+        for (uint256 i = 0; i < data.length; i++) {
+            uint256 char = uint256(uint8(data[i]));
             require(char >= 48 && char <= 57, "_asciiBytesToUInt: Wrong char");
             result = result * 10 + (char - 48);
         }
@@ -202,10 +204,10 @@ library BytesHelper {
      * @notice In the original there is no necessary conversion in ASCII. Also added leading 0x
      */
     function _bytesToASCIIBytes(bytes memory input) internal pure returns (bytes memory) {
-        uint inputLen = input.length;
+        uint256 inputLen = input.length;
         bytes memory res = new bytes(inputLen * 2);
 
-        for (uint i = 0; i < inputLen; i++) {
+        for (uint256 i = 0; i < inputLen; i++) {
             uint8 symbol = uint8(input[i]);
             (bytes1 high, bytes1 low) = _uint8ConvertToAscii(symbol);
             res[2 * i] = high;
@@ -218,10 +220,10 @@ library BytesHelper {
     // MARK: - Bytes32 operation
 
     /**
-     * @notice Convert uint type to the bytes32 type
+     * @notice Convert uint256 type to the bytes32 type
      * @param value Uint to convert
      */
-    function _uintToBytes32(uint value) internal pure returns (bytes32 bts) {
+    function _uintToBytes32(uint256 value) internal pure returns (bytes32 bts) {
         return bytes32(value);
     }
 
@@ -230,7 +232,7 @@ library BytesHelper {
      * @param addr Address to convert
      */
     function _addressToBytes32ShiftLeft(address addr) internal pure returns (bytes32 bts) {
-        return bytes32(uint(uint160(addr)) << 96);
+        return bytes32(uint256(uint160(addr)) << 96);
     }
 
     /**
@@ -238,7 +240,7 @@ library BytesHelper {
      * @param addr Address to convert
      */
     function _addressToBytes32(address addr) internal pure returns (bytes32 bts) {
-        return bytes32(uint(uint160(addr)));
+        return bytes32(uint256(uint160(addr)));
     }
 
     /**
@@ -251,7 +253,7 @@ library BytesHelper {
             pointer := mload(0x40)
         }
         bytes memory baseBytes = new bytes(32);
-        for (uint i = 0; i < 32; i++) {
+        for (uint256 i = 0; i < 32; i++) {
             bytes1 b1 = data[i];
             if (b1 >= 0x61 && b1 <= 0x7A) {
                 b1 = bytes1(uint8(b1) - 32);
@@ -269,7 +271,7 @@ library BytesHelper {
      * @param value Value to be converted to address
      */
     function _bytes32ToAddressShiftRight(bytes32 value) internal pure returns (address) {
-        return address(uint160(uint(value) >> 96));
+        return address(uint160(uint256(value) >> 96));
     }
 
     /**
@@ -277,7 +279,7 @@ library BytesHelper {
      * @param value Value to be converted to address
      */
     function _bytes32ToAddress(bytes32 value) internal pure returns (address) {
-        return address(uint160(uint(value)));
+        return address(uint160(uint256(value)));
     }
 
     /**
@@ -285,7 +287,7 @@ library BytesHelper {
      * @param input Input bytes
      * @param offset Offset from which will be extracted 32 bytes
      */
-    function _extractBytes32(bytes memory input, uint offset) internal pure returns (bytes32 result) {
+    function _extractBytes32(bytes memory input, uint256 offset) internal pure returns (bytes32 result) {
         require(offset + 32 <= input.length, "_extractBytes32: Wrong offset");
         assembly {
             result := mload(add(add(0x20, input), offset))
@@ -296,10 +298,10 @@ library BytesHelper {
      * @notice Calculates length without empty bytes
      * @param x Value
      */
-    function _countPureLengthForBytes32(bytes32 x) internal pure returns (uint) {
-        uint charCount = 0;
-        for (uint j = 0; j < 32; j++) {
-            bytes1 char = bytes1(bytes32(uint(x) << (j * 8)));
+    function _countPureLengthForBytes32(bytes32 x) internal pure returns (uint256) {
+        uint256 charCount = 0;
+        for (uint256 j = 0; j < 32; j++) {
+            bytes1 char = bytes1(bytes32(uint256(x) << (j * 8)));
             if (char != 0) {
                 charCount++;
             }
@@ -315,9 +317,9 @@ library BytesHelper {
      */
     function _trimBytes32(bytes32 x) internal pure returns (bytes memory) {
         bytes memory bytesArray = new bytes(32);
-        uint charCount = 0;
-        for (uint j = 0; j < 32; j++) {
-            bytes1 char = bytes1(bytes32(uint(x) << (j * 8)));
+        uint256 charCount = 0;
+        for (uint256 j = 0; j < 32; j++) {
+            bytes1 char = bytes1(bytes32(uint256(x) << (j * 8)));
             if (char != 0) {
                 bytesArray[charCount] = char;
                 charCount++;
@@ -325,7 +327,7 @@ library BytesHelper {
         }
 
         bytes memory bytesTrimmed = new bytes(charCount);
-        for (uint j = 0; j < charCount; j++) {
+        for (uint256 j = 0; j < charCount; j++) {
             bytesTrimmed[j] = bytesArray[j];
         }
 
@@ -384,10 +386,10 @@ library BytesHelper {
     }
 
     /**
-     * @notice Converts uint to bytes
+     * @notice Converts uint256 to bytes
      * @param value Uint value
      */
-    function _uintToBytes(uint value) internal pure returns (bytes memory) {
+    function _uintToBytes(uint256 value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
 
@@ -400,15 +402,15 @@ library BytesHelper {
     }
 
     /**
-     * @notice Converts uint array to bytes
+     * @notice Converts uint256 array to bytes
      * @param value Uint array value
      */
-    function _uintArrayToBytes(uint[] memory value) internal pure returns (bytes memory) {
+    function _uintArrayToBytes(uint256[] memory value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
 
     /**
-     * @notice Converts uint array to bytes
+     * @notice Converts uint256 array to bytes
      * @param value Uint8 array value
      */
     function _uint8ArrayToBytes(uint8[] memory value) internal pure returns (bytes memory) {
@@ -416,18 +418,18 @@ library BytesHelper {
     }
 
     /**
-     * @notice Converts int to bytes
+     * @notice Converts int256 to bytes
      * @param value Int value
      */
-    function _intToBytes(int value) internal pure returns (bytes memory) {
+    function _intToBytes(int256 value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
 
     /**
-     * @notice Converts int array to bytes
+     * @notice Converts int256 array to bytes
      * @param value Int array value
      */
-    function _intArrayToBytes(int[] memory value) internal pure returns (bytes memory) {
+    function _intArrayToBytes(int256[] memory value) internal pure returns (bytes memory) {
         return abi.encode(value);
     }
 
@@ -480,13 +482,13 @@ library BytesHelper {
      * @param num The number to be converted
      * @return Bytes representation of the number
      */
-    function _uintToASCIIBytes(uint num) internal pure returns (bytes memory) {
-        uint _i = num;
+    function _uintToASCIIBytes(uint256 num) internal pure returns (bytes memory) {
+        uint256 _i = num;
         if (_i == 0) {
             return "0";
         }
-        uint j = _i;
-        uint len;
+        uint256 j = _i;
+        uint256 len;
         while (j != 0) {
             len++;
             j /= 10;
@@ -507,8 +509,8 @@ library BytesHelper {
     function _addressToASCIIBytes(address addr) internal pure returns (bytes memory) {
         bytes memory res = new bytes(40);
 
-        for (uint i = 0; i < 20; i++) {
-            uint8 symbol = uint8(uint(uint160(addr)) >> (8 * (19 - i)));
+        for (uint256 i = 0; i < 20; i++) {
+            uint8 symbol = uint8(uint256(uint160(addr)) >> (8 * (19 - i)));
 
             (bytes1 high, bytes1 low) = _uint8ConvertToAscii(symbol);
             res[2 * i] = high;
@@ -523,11 +525,11 @@ library BytesHelper {
      */
     function _bytes32ArrayToASCIIBytes(bytes32[] memory input) internal pure returns (bytes memory) {
         bytes memory result;
-        uint length = input.length;
+        uint256 length = input.length;
 
         if (length > 0) {
             result = abi.encodePacked(_bytes32ToASCIIBytes(input[0]));
-            for (uint i = 1; i < length; i++) {
+            for (uint256 i = 1; i < length; i++) {
                 result = abi.encodePacked(result, ", ", _bytes32ToASCIIBytes(input[i]));
             }
         }
@@ -542,8 +544,8 @@ library BytesHelper {
     function _bytes32ToASCIIBytes(bytes32 input) internal pure returns (bytes memory) {
         bytes memory res = new bytes(64);
 
-        for (uint i = 0; i < 32; i++) {
-            uint8 symbol = uint8(uint(input) >> (8 * (31 - i)));
+        for (uint256 i = 0; i < 32; i++) {
+            uint8 symbol = uint8(uint256(input) >> (8 * (31 - i)));
 
             (bytes1 high, bytes1 low) = _uint8ConvertToAscii(symbol);
             res[2 * i] = high;
@@ -561,7 +563,7 @@ library BytesHelper {
      * @param start Start index
      * @param length Slice length
      */
-    function _getSlice(bytes memory data, uint start, uint length) internal pure returns (bytes memory result) {
+    function _getSlice(bytes memory data, uint256 start, uint256 length) internal pure returns (bytes memory result) {
         require(data.length >= (start + length), "_getSlice: Wrong start or length");
 
         assembly {
@@ -601,9 +603,9 @@ library BytesHelper {
      * @param start Start index
      * @param end End index
      */
-    function _getSliceBytes32(bytes32[] memory data, uint start, uint end) internal pure returns (bytes32[] memory) {
+    function _getSliceBytes32(bytes32[] memory data, uint256 start, uint256 end) internal pure returns (bytes32[] memory) {
         bytes32[] memory result = new bytes32[](end - start);
-        for (uint i = 0; i < end - start; i++) {
+        for (uint256 i = 0; i < end - start; i++) {
             result[i] = data[i + start];
         }
         return result;
@@ -615,9 +617,9 @@ library BytesHelper {
      * @param start Start index
      * @param end End index
      */
-    function _getSlice(bytes[] memory data, uint start, uint end) internal pure returns (bytes[] memory) {
+    function _getSlice(bytes[] memory data, uint256 start, uint256 end) internal pure returns (bytes[] memory) {
         bytes[] memory result = new bytes[](end - start);
-        for (uint i = 0; i < end - start; i++) {
+        for (uint256 i = 0; i < end - start; i++) {
             result[i] = data[i + start];
         }
         return result;
@@ -633,9 +635,9 @@ library BytesHelper {
      * @return res string merged with separators
      */
     function _append(string[] memory strArray, string memory separator) internal pure returns (string memory res) {
-        uint length = strArray.length;
+        uint256 length = strArray.length;
         if (length > 0) {
-            for (uint i = 0; i < length; i++) {
+            for (uint256 i = 0; i < length; i++) {
                 if (i == 0) {
                     res = string(abi.encodePacked(res, strArray[i]));
                 } else {
@@ -655,9 +657,9 @@ library BytesHelper {
      * @return res string merged with separators
      */
     function _append(bytes[] memory bytesArray, string memory separator) internal pure returns (string memory res) {
-        uint length = bytesArray.length;
+        uint256 length = bytesArray.length;
         if (length > 0) {
-            for (uint i = 0; i < length; i++) {
+            for (uint256 i = 0; i < length; i++) {
                 if (i == 0) {
                     res = string(abi.encodePacked(res, string(bytesArray[i])));
                 } else {
@@ -683,28 +685,28 @@ library BytesHelper {
     }
 
     /**
-     * @notice Converts bytes[] value to uint[]
+     * @notice Converts bytes[] value to uint256[]
      * @param valuesArray Value to convert
-     * @return uint[] value
+     * @return uint256[] value
      */
-    function _bytesArrayToUIntArray(bytes[] memory valuesArray) internal pure returns (uint[] memory) {
-        uint length = valuesArray.length;
-        uint[] memory result = new uint[](length);
-        for (uint i = 0; i < length; i++) {
+    function _bytesArrayToUIntArray(bytes[] memory valuesArray) internal pure returns (uint256[] memory) {
+        uint256 length = valuesArray.length;
+        uint256[] memory result = new uint256[](length);
+        for (uint256 i = 0; i < length; i++) {
             result[i] = _bytesToUInt(valuesArray[i]);
         }
         return result;
     }
 
     /**
-     * @notice Converts bytes[] value to int[]
+     * @notice Converts bytes[] value to int256[]
      * @param valuesArray Value to convert
-     * @return int[] value
+     * @return int256[] value
      */
-    function _bytesArrayToIntArray(bytes[] memory valuesArray) internal pure returns (int[] memory) {
-        uint length = valuesArray.length;
-        int[] memory result = new int[](length);
-        for (uint i = 0; i < length; i++) {
+    function _bytesArrayToIntArray(bytes[] memory valuesArray) internal pure returns (int256[] memory) {
+        uint256 length = valuesArray.length;
+        int256[] memory result = new int256[](length);
+        for (uint256 i = 0; i < length; i++) {
             result[i] = _bytesToInt(valuesArray[i]);
         }
         return result;
@@ -716,9 +718,9 @@ library BytesHelper {
      * @return bool[] value
      */
     function _bytesArrayToBoolArray(bytes[] memory valuesArray) internal pure returns (bool[] memory) {
-        uint length = valuesArray.length;
+        uint256 length = valuesArray.length;
         bool[] memory result = new bool[](length);
-        for (uint i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i++) {
             require(valuesArray[i].length == 1, "_bytesArrayToBoolArray: Wrong values length");
             result[i] = (valuesArray[i][0] == bytes1(0x01)) ? true : false;
         }
@@ -731,9 +733,9 @@ library BytesHelper {
      * @return bytes32[] value
      */
     function _bytesArrayToBytes32Array(bytes[] memory valuesArray) internal pure returns (bytes32[] memory) {
-        uint length = valuesArray.length;
+        uint256 length = valuesArray.length;
         bytes32[] memory result = new bytes32[](length);
-        for (uint i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i++) {
             result[i] = _bytesToBytes32(valuesArray[i]);
         }
         return result;
@@ -745,9 +747,9 @@ library BytesHelper {
      * @return string[] value
      */
     function _bytesArrayToStringArray(bytes[] memory valuesArray) internal pure returns (string[] memory) {
-        uint length = valuesArray.length;
+        uint256 length = valuesArray.length;
         string[] memory result = new string[](length);
-        for (uint i = 0; i < length; i++) {
+        for (uint256 i = 0; i < length; i++) {
             result[i] = string(valuesArray[i]);
         }
         return result;
@@ -769,7 +771,7 @@ library BytesHelper {
      * @dev Adds val to the list
      */
     function _pushBytes(bytes[] memory arr, bytes memory val) internal pure returns (bytes[] memory) {
-        uint length = arr.length;
+        uint256 length = arr.length;
         assembly {
             mstore(arr, add(mload(arr), 1))
             mstore(0x40, add(mload(0x40), 0x32))
@@ -782,7 +784,7 @@ library BytesHelper {
      * @dev Adds val to the list
      */
     function _pushBytes32(bytes32[] memory arr, bytes32 val) internal pure returns (bytes32[] memory) {
-        uint length = arr.length;
+        uint256 length = arr.length;
         assembly {
             mstore(arr, add(mload(arr), 1))
             mstore(0x40, add(mload(0x40), 0x32))
@@ -795,7 +797,7 @@ library BytesHelper {
      * @dev Adds val to the list
      */
     function _pushAddress(address[] memory arr, address val) internal pure returns (address[] memory) {
-        uint length = arr.length;
+        uint256 length = arr.length;
         assembly {
             mstore(arr, add(mload(arr), 1))
             mstore(0x40, add(mload(0x40), 0x32))
