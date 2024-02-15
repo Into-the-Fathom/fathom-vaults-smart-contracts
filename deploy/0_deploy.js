@@ -137,7 +137,7 @@ module.exports = async ({ getNamedAccounts, deployments, ethers }) => {
     const depositLimit = ethers.parseUnits("500", 18);
     const maxDebt = ethers.parseUnits("500", 18);
     // const profitMaxUnlockTime = 604800; // 7 days seconds
-    const profitMaxUnlockTime = 1; // 1 sec
+    const profitMaxUnlockTime = 0; // 1 sec
 
     const protocolFee = 2000; // 20% of total fee
 
