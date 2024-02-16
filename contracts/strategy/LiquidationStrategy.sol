@@ -15,6 +15,10 @@ import "./interfaces/liquidationStrategy/IStablecoinAdapter.sol";
 import { IBookKeeper } from "./interfaces/liquidationStrategy/IBookKeeper.sol";
 import "./libraries/BytesHelper.sol";
 
+/// @title LiquidationStrategy for FathomVault
+/// @notice Enables participation in generating profits from liquidations and contributes to the liquidation of FXD positions.
+/// @dev Inherits from BaseStrategy, ReentrancyGuard, implements IFlashLendingCallee, and IERC165.
+
 // solhint-disable
 contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCallee, IERC165 {
     using SafeERC20 for ERC20;
@@ -116,10 +120,17 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
         return TokenizedStrategy.totalIdle();
     }
 
+    /// @notice Withdraws a specified amount of the strategy's asset (FXD) in the case of an emergency.
+    /// @dev Only the current strategy manager can call this function.
+    /// This is part of the emergency shutdown mechanism.
+    /// @param _amount The amount of FXD to withdraw.
     function shutdownWithdraw(uint256 _amount) external override onlyStrategyManager {
         _emergencyWithdraw(_amount);
     }
 
+    /// @notice Sets the strategy manager address.
+    /// @dev Only the current strategy manager can call this function.
+    /// @param _strategyManager The address of the new strategy manager.
     function setStrategyManager(address _strategyManager) external onlyStrategyManager {
         require(_strategyManager != address(0), "LiquidationStrategy: zero address");
         require(_strategyManager != strategyManager, "LiquidationStrategy: same strategy manager");
@@ -127,6 +138,10 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
         emit LogSetStrategyManager(_strategyManager);
     }
 
+    /// @notice Sets the FixedSpreadLiquidationStrategy contract address.
+    /// @dev Only the current strategy manager can call this function.
+    /// This is critical as it determines who can initiate the flashLendingCall.
+    /// @param _fixedSpreadLiquidationStrategy The address of the new FixedSpreadLiquidationStrategy contract.
     function setFixedSpreadLiquidationStrategy(address _fixedSpreadLiquidationStrategy) external onlyStrategyManager {
         require(_fixedSpreadLiquidationStrategy != address(0), "LiquidationStrategy: zero address");
         require(_fixedSpreadLiquidationStrategy != fixedSpreadLiquidationStrategy, "LiquidationStrategy: same fixed spread liquidation strategy");
@@ -134,12 +149,20 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
         emit LogSetFixedSpreadLiquidationStrategy(_fixedSpreadLiquidationStrategy);
     }
 
+    /// @notice Allows the strategy manager to toggle the allowance of losses during liquidation.
+    /// @dev Only the current strategy manager can call this function.
+    /// This affects how the `flashLendingCall` handles insufficient FXD from collateral sales.
+    /// @param _allowLoss A boolean indicating whether losses are allowed (true) or not (false).
     function setAllowLoss(bool _allowLoss) external onlyStrategyManager {
         require(_allowLoss != allowLoss, "LiquidationStrategy: same allowLoss");
         allowLoss = _allowLoss;
         emit LogAllowLoss(_allowLoss);
     }
 
+    /// @notice Withdraws a specified amount of WXDC from the contract.
+    /// @dev Only the current strategy manager can call this function.
+    /// Useful for managing the reserves after liquidation events.
+    /// @param _amount The amount of WXDC to withdraw.
     function shutdownWithdrawWXDC(uint256 _amount) external onlyStrategyManager {
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
@@ -148,16 +171,29 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
-        idleWXDC.amountNeededToPayDebt -= _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
+
+        uint256 deductAmountNeededToPayDebt = _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
+        if (idleWXDC.amountNeededToPayDebt >= deductAmountNeededToPayDebt) {
+            idleWXDC.amountNeededToPayDebt -= deductAmountNeededToPayDebt;
+        } else {
+            idleWXDC.amountNeededToPayDebt = 0;
+        }
+
         WXDC.safeTransfer(strategyManager, _amount);
         emit LogShutdownWithdrawWXDC(strategyManager, _amount);
     }
 
+    /// @notice Allows the strategy manager to sell WXDC held by the contract.
+    /// @dev Only the current strategy manager can call this function.
+    /// This allows for managing the WXDC obtained through liquidations.
+    /// @param _router The UniswapV2Router02 (or a fork) used for the sale.
+    /// @param _amount The amount of WXDC to sell.
+    /// @param _minAmountOut The minimum amount of FXD to accept for the sale.
     function sellWXDC(IUniswapV2Router02 _router, uint256 _amount, uint256 _minAmountOut) external onlyStrategyManager {
         require(address(_router) != address(0), "LiquidationStrategy: zero address");
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
-        
+
         idleWXDC.WXDCAmount -= _amount;
 
         if (idleWXDC.WXDCAmount == 0) {
@@ -165,7 +201,12 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
             idleWXDC.averagePriceOfWXDC = 0;
         }
 
-        idleWXDC.amountNeededToPayDebt -= _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
+        uint256 deductAmountNeededToPayDebt = _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
+        if (idleWXDC.amountNeededToPayDebt >= deductAmountNeededToPayDebt) {
+            idleWXDC.amountNeededToPayDebt -= deductAmountNeededToPayDebt;
+        } else {
+            idleWXDC.amountNeededToPayDebt = 0;
+        }
 
         (address[] memory path, uint256 dexAmountOut) = _computeMostProfitablePath(_router, address(WXDC), _amount);
 
@@ -175,16 +216,18 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
         emit LogSellWXDC(path, _router, _amount, _minAmountOut, dexAmountOut, receivedAmount);
     }
 
+    /// @notice Handles the liquidation process, swapping WXDC for FXD, and repaying debt.
+    /// @dev Can only be called by the FixedSpreadLiquidationStrategy contract.
+    /// This function is critical for the flash liquidation process.
+    /// @param _debtValueToRepay The value of the debt to repay in the liquidation process, in RAY.
+    /// @param _collateralAmountToLiquidate The amount of collateral to liquidate, in WAD.
+    /// @param data Encoded data containing liquidatorAddress, tokenAdapter, and router information.
     function flashLendingCall(
         address,
         uint256 _debtValueToRepay, // [rad]
         uint256 _collateralAmountToLiquidate, // [wad]
         bytes calldata data
-    )
-        external
-        onlyFixedSpreadLiquidationStrategy
-        nonReentrant
-    {
+    ) external onlyFixedSpreadLiquidationStrategy nonReentrant {
         LocalVars memory _vars;
         (_vars.liquidatorAddress, _vars.tokenAdapter, _vars.router) = abi.decode(data, (address, IGenericTokenAdapter, IUniswapV2Router02));
 
@@ -308,8 +351,7 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
     }
 
     // @dev _computeMostProfitablePath should be upgraded/updated once curvePool launches and DEX pool of USDT/FXD will be drained.
-    // an alternative solution can be to involve xSwap, but needs more research.
-    // above problem is not the problem for the current implementation(as of 16th of Jan) but possible future issue.
+    // an alternative solution can be to involvement of Xswap(UniswapV3)
     function _computeMostProfitablePath(
         IUniswapV2Router02 _router,
         address _collateralToken,
