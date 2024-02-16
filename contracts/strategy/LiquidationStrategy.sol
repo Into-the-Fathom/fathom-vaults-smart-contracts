@@ -148,6 +148,7 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
+        idleWXDC.amountNeededToPayDebt -= _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
         WXDC.safeTransfer(strategyManager, _amount);
         emit LogShutdownWithdrawWXDC(strategyManager, _amount);
     }
@@ -156,12 +157,15 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
         require(address(_router) != address(0), "LiquidationStrategy: zero address");
         require(_amount > 0, "LiquidationStrategy: zero amount");
         require(_amount <= idleWXDC.WXDCAmount, "LiquidationStrategy: wrong amount");
-
+        
         idleWXDC.WXDCAmount -= _amount;
+
         if (idleWXDC.WXDCAmount == 0) {
             idleWXDC.amountNeededToPayDebt = 0;
             idleWXDC.averagePriceOfWXDC = 0;
         }
+
+        idleWXDC.amountNeededToPayDebt -= _amount.mul(idleWXDC.averagePriceOfWXDC).div(WAD);
 
         (address[] memory path, uint256 dexAmountOut) = _computeMostProfitablePath(_router, address(WXDC), _amount);
 
@@ -179,7 +183,6 @@ contract LiquidationStrategy is BaseStrategy, ReentrancyGuard, IFlashLendingCall
     )
         external
         onlyFixedSpreadLiquidationStrategy
-        //  whenNotPaused
         nonReentrant
     {
         LocalVars memory _vars;
