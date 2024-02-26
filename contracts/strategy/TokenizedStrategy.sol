@@ -235,7 +235,7 @@ contract TokenizedStrategy is ReentrancyGuard {
         require(_performanceFeeRecipient != address(this), "self");
         stor.performanceFeeRecipient = _performanceFeeRecipient;
         // Default to a 10% performance fee.
-        stor.performanceFee = 1_000;
+        stor.performanceFee = 0;
         // Set last report to this block.
         stor.lastReport = uint128(block.timestamp);
 
